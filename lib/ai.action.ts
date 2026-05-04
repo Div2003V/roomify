@@ -3,7 +3,7 @@ import {fetchBlobFromUrl} from "./utils";
 
 type FloorPlanTo3DBox = { x1: number; y1: number; x2: number; y2: number };
 type FloorPlanTo3DClass = { name: "wall" | "window" | "door" | string };
-type FloorPlanTo3DResponse = {
+export type FloorPlanSceneData = {
   points?: FloorPlanTo3DBox[];
   classes?: FloorPlanTo3DClass[];
   Width?: number;
@@ -52,13 +52,13 @@ export const generate3DView = async ({ sourceImage }: Generate3DViewParams) => {
         throw new Error(`FloorPlanTo3D API failed: ${resp.status} ${text}`);
     }
 
-    const json = (await resp.json()) as FloorPlanTo3DResponse;
-    const renderedImage = await renderFloorPlan3DPreview(json);
+    const scene = (await resp.json()) as FloorPlanSceneData;
+    const renderedImage = await renderFloorPlan3DPreview(scene);
 
-    return { renderedImage, renderedPath: undefined };
+    return { renderedImage, renderedPath: undefined, scene };
 }
 
-const renderFloorPlan3DPreview = async (api: FloorPlanTo3DResponse): Promise<string | null> => {
+const renderFloorPlan3DPreview = async (api: FloorPlanSceneData): Promise<string | null> => {
     if (typeof window === "undefined") return null;
 
     const points = Array.isArray(api.points) ? api.points : [];

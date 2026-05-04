@@ -10,7 +10,7 @@ const Navbar = () => {
                         <Box  className="logo" />
 
                         <span className="name">
-                            ArchLensAI
+                            Roomify
                         </span>
                     </div>
 

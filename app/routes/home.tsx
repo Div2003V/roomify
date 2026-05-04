@@ -71,13 +71,13 @@ export default function Home() {
                       <div className="pulse"></div>
                   </div>
 
-                  <p>Introducing ArchLensAI </p>
+                  <p>Introducing Roomify 2.0</p>
               </div>
 
-              <h1>Build beautiful spaces at the speed of thought with ArchLensAI</h1>
+              <h1>Build beautiful spaces at the speed of thought with Roomify</h1>
 
               <p className="subtitle">
-                  ArchLensAI is an AI-first design environment that helps you visualize, render, and ship architectural projects faster  than ever.
+                  Roomify is an AI-first design environment that helps you visualize, render, and ship architectural projects faster  than ever.
               </p>
 
               <div className="actions">

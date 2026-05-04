@@ -5,6 +5,7 @@ import {Box, Download, RefreshCcw, Share2, X} from "lucide-react";
 import Button from "../../components/ui/Button";
 import {getProject, saveProject} from "../../lib/projects.store";
 import {ReactCompareSlider, ReactCompareSliderImage} from "react-compare-slider";
+import Floorplan3DViewer from "../../components/Floorplan3DViewer";
 
 const VisualizerId = () => {
     const { id } = useParams();
@@ -17,6 +18,7 @@ const VisualizerId = () => {
 
     const [isProcessing, setIsProcessing] = useState(false);
     const [currentImage, setCurrentImage] = useState<string | null>(null);
+    const [activeView, setActiveView] = useState<"3d" | "render">("3d");
 
     const handleBack = () => navigate('/');
     const handleExport = () => {
@@ -35,7 +37,7 @@ const VisualizerId = () => {
 
         try {
             setIsProcessing(true);
-            const result = await generate3DView({ sourceImage: item.sourceImage });
+            const result = (await generate3DView({ sourceImage: item.sourceImage })) as Generate3DViewResult;
 
             if(result.renderedImage) {
                 setCurrentImage(result.renderedImage);
@@ -44,6 +46,7 @@ const VisualizerId = () => {
                     ...item,
                     renderedImage: result.renderedImage,
                     renderedPath: result.renderedPath,
+                    scene: result.scene,
                     timestamp: Date.now(),
                 }
 
@@ -134,7 +137,7 @@ const VisualizerId = () => {
                                 size="sm"
                                 onClick={handleExport}
                                 className="export"
-                                disabled={!currentImage}
+                                disabled={!currentImage || activeView !== "render"}
                             >
                                 <Download className="w-4 h-4 mr-2" /> Export
                             </Button>
@@ -146,7 +149,30 @@ const VisualizerId = () => {
                     </div>
 
                     <div className={`render-area ${isProcessing ? 'is-processing': ''}`}>
-                        {currentImage ? (
+                        <div className="absolute top-4 left-4 z-20 flex items-center gap-2 rounded-lg border border-zinc-200 bg-white/90 backdrop-blur px-2 py-1 shadow-sm">
+                            <button
+                                type="button"
+                                onClick={() => setActiveView("3d")}
+                                className={`px-2.5 py-1 text-xs font-bold uppercase tracking-wide rounded-md transition-colors ${
+                                    activeView === "3d" ? "bg-black text-white" : "text-zinc-600 hover:text-black hover:bg-black/5"
+                                }`}
+                            >
+                                3D
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveView("render")}
+                                className={`px-2.5 py-1 text-xs font-bold uppercase tracking-wide rounded-md transition-colors ${
+                                    activeView === "render" ? "bg-black text-white" : "text-zinc-600 hover:text-black hover:bg-black/5"
+                                }`}
+                            >
+                                Render
+                            </button>
+                        </div>
+
+                        {activeView === "3d" ? (
+                            <Floorplan3DViewer scene={project?.scene} />
+                        ) : currentImage ? (
                             <img src={currentImage} alt="AI Render" className="render-img" />
                         ) : (
                             <div className="render-placeholder">
