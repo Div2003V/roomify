@@ -27,8 +27,46 @@ const Upload = ({ onComplete }: UploadProps) => {
         };
     }, []);
 
-    const processFile = useCallback((file: File) => {
-        setFile(file);
+    const fileToPngIfNeeded = useCallback(async (originalFile: File): Promise<File> => {
+        if (originalFile.type === "image/png") return originalFile;
+
+        // Convert any other image type to PNG client-side via canvas.
+        const objectUrl = URL.createObjectURL(originalFile);
+        try {
+            const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => resolve(image);
+                image.onerror = reject;
+                image.src = objectUrl;
+            });
+
+            const canvas = document.createElement("canvas");
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return originalFile;
+
+            ctx.drawImage(img, 0, 0);
+
+            const pngBlob = await new Promise<Blob | null>((resolve) => {
+                canvas.toBlob((blob) => resolve(blob), "image/png");
+            });
+
+            if (!pngBlob) return originalFile;
+
+            const safeBaseName = (originalFile.name || "upload")
+                .replace(/\.[^/.]+$/, "");
+            const pngName = `${safeBaseName}.png`;
+            return new File([pngBlob], pngName, { type: "image/png" });
+        } finally {
+            URL.revokeObjectURL(objectUrl);
+        }
+    }, []);
+
+    const processFile = useCallback(async (incomingFile: File) => {
+        const normalizedFile = await fileToPngIfNeeded(incomingFile);
+        setFile(normalizedFile);
         setProgress(0);
 
         const reader = new FileReader();
@@ -57,8 +95,8 @@ const Upload = ({ onComplete }: UploadProps) => {
                 });
             }, PROGRESS_INTERVAL_MS);
         };
-        reader.readAsDataURL(file);
-    }, [onComplete]);
+        reader.readAsDataURL(normalizedFile);
+    }, [fileToPngIfNeeded, onComplete]);
 
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
@@ -76,15 +114,17 @@ const Upload = ({ onComplete }: UploadProps) => {
         const droppedFile = e.dataTransfer.files[0];
         const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
         if (droppedFile && allowedTypes.includes(droppedFile.type)) {
-            processFile(droppedFile);
+            void processFile(droppedFile);
         }
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0];
         if (selectedFile) {
-            processFile(selectedFile);
+            void processFile(selectedFile);
         }
+        // Allow selecting the same file again.
+        e.target.value = "";
     };
 
     const handleDropzoneActivate = () => inputRef.current?.click();
@@ -114,6 +154,7 @@ const Upload = ({ onComplete }: UploadProps) => {
                         className="drop-input"
                         accept=".jpg,.jpeg,.png,.webp"
                         onChange={handleChange}
+                        onClick={(e) => e.stopPropagation()}
                         ref={inputRef}
                     />
 

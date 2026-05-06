@@ -1,7 +1,8 @@
 import { Canvas } from "@react-three/fiber";
 import { Environment, Grid, OrbitControls } from "@react-three/drei";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import type { FloorPlanSceneData } from "../lib/ai.action";
 
 type Props = {
   scene?: FloorPlanSceneData;
@@ -11,9 +12,21 @@ type CameraPreset = "iso" | "top";
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
+type WallFaceIndex = 0 | 1 | 2 | 3 | 4 | 5;
+type WallFaceColorState = Record<number, [string, string, string, string, string, string]>;
+
+const DEFAULT_WALL_FACE_COLORS: [string, string, string, string, string, string] = [
+  "#d2d0cb",
+  "#d2d0cb",
+  "#d2d0cb",
+  "#d2d0cb",
+  "#d2d0cb",
+  "#d2d0cb",
+];
+
 const computeScene = (scene?: FloorPlanSceneData) => {
-  const points = Array.isArray(scene?.points) ? scene!.points! : [];
-  const classes = Array.isArray(scene?.classes) ? scene!.classes! : [];
+  const points = Array.isArray(scene?.points) ? scene.points ?? [] : [];
+  const classes = Array.isArray(scene?.classes) ? scene.classes ?? [] : [];
   const width = typeof scene?.Width === "number" && scene.Width > 0 ? scene.Width : 1024;
   const height = typeof scene?.Height === "number" && scene.Height > 0 ? scene.Height : 1024;
 
@@ -49,25 +62,37 @@ function SceneMeshes({
   scene,
   selectedIndex,
   onSelect,
+  wallFaceColors,
+  onRequestWallFaceColorPick,
 }: {
   scene: ReturnType<typeof computeScene>;
   selectedIndex: number | null;
   onSelect: (idx: number | null) => void;
+  wallFaceColors: WallFaceColorState;
+  onRequestWallFaceColorPick: (args: {
+    wallIndex: number;
+    faceIndex: WallFaceIndex;
+    clientX: number;
+    clientY: number;
+    currentColor: string;
+  }) => void;
 }) {
   const { width, height, items } = scene;
 
   const scale = 10 / Math.max(width, height); // keep consistent world size
   const baseY = 0;
 
-  const wallMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: "#d2d0cb",
-        roughness: 0.95,
-        metalness: 0.0,
-      }),
-    [],
-  );
+  const wallMatsRef = useRef<Record<number, THREE.MeshStandardMaterial[]>>({});
+
+  useEffect(() => {
+    return () => {
+      for (const mats of Object.values(wallMatsRef.current) as THREE.MeshStandardMaterial[][]) {
+        for (const m of mats) m.dispose();
+      }
+      wallMatsRef.current = {};
+    };
+  }, []);
+
   const doorMat = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
@@ -88,6 +113,15 @@ function SceneMeshes({
       }),
     [],
   );
+  const miscMat = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: "#d2d0cb",
+        roughness: 0.95,
+        metalness: 0.0,
+      }),
+    [],
+  );
   const selectedMat = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
@@ -96,6 +130,9 @@ function SceneMeshes({
         metalness: 0.05,
         emissive: new THREE.Color("#3b82f6"),
         emissiveIntensity: 0.15,
+        transparent: true,
+        opacity: 0.22,
+        depthWrite: false,
       }),
     [],
   );
@@ -125,14 +162,26 @@ function SceneMeshes({
           clamp(sz, 0.05, 20),
         ];
 
-        const mat =
-          selectedIndex === idx
-            ? selectedMat
-            : kind === "window"
-              ? windowMat
-              : kind === "door"
-                ? doorMat
-                : wallMat;
+        const isWall = kind === "wall";
+        const wallColors = wallFaceColors[idx] ?? DEFAULT_WALL_FACE_COLORS;
+
+        if (isWall && !wallMatsRef.current[idx]) {
+          wallMatsRef.current[idx] = wallColors.map(
+            (c) =>
+              new THREE.MeshStandardMaterial({
+                color: c,
+                roughness: 0.95,
+                metalness: 0.0,
+              }),
+          );
+        }
+
+        if (isWall) {
+          const mats = wallMatsRef.current[idx]!;
+          for (let i = 0; i < 6; i++) {
+            mats[i].color.set(wallColors[i]);
+          }
+        }
 
         return (
           <mesh
@@ -141,17 +190,50 @@ function SceneMeshes({
             receiveShadow
             position={[x, baseY + extrusion / 2, z]}
             onPointerDown={(e) => {
+              if (e.button === 2) return;
               e.stopPropagation();
               onSelect(selectedIndex === idx ? null : idx);
             }}
+            onContextMenu={(e) => {
+              if (!isWall) return;
+              e.stopPropagation();
+              e.nativeEvent.preventDefault();
+
+              const mi = e.face?.materialIndex;
+              if (typeof mi !== "number") return;
+              if (mi < 0 || mi > 5) return;
+
+              onRequestWallFaceColorPick({
+                wallIndex: idx,
+                faceIndex: mi as WallFaceIndex,
+                clientX: e.nativeEvent.clientX,
+                clientY: e.nativeEvent.clientY,
+                currentColor: wallColors[mi],
+              });
+            }}
+            material={
+              isWall
+                ? (wallMatsRef.current[idx] as unknown as THREE.Material | THREE.Material[])
+                : kind === "window"
+                  ? windowMat
+                  : kind === "door"
+                    ? doorMat
+                    : miscMat
+            }
           >
             <boxGeometry args={geomArgs} />
-            <primitive object={mat} attach="material" />
             {/* visual hint for "thickness" via a subtle inset outline */}
             <mesh position={[0, 0, 0]} scale={[1 - thickness * 0.02, 1, 1 - thickness * 0.02]}>
               <boxGeometry args={geomArgs} />
               <meshStandardMaterial color="#000000" transparent opacity={0.02} />
             </mesh>
+
+            {selectedIndex === idx && (
+              <mesh scale={[1.01, 1.01, 1.01]}>
+                <boxGeometry args={geomArgs} />
+                <primitive object={selectedMat} attach="material" />
+              </mesh>
+            )}
           </mesh>
         );
       })}
@@ -165,12 +247,24 @@ function SceneRoot({
   showGrid,
   selectedIndex,
   setSelectedIndex,
+  wallFaceColors,
+  onRequestWallFaceColorPick,
+  onClearOverlays,
 }: {
   scene: ReturnType<typeof computeScene>;
   preset: CameraPreset;
   showGrid: boolean;
   selectedIndex: number | null;
   setSelectedIndex: (v: number | null) => void;
+  wallFaceColors: WallFaceColorState;
+  onRequestWallFaceColorPick: (args: {
+    wallIndex: number;
+    faceIndex: WallFaceIndex;
+    clientX: number;
+    clientY: number;
+    currentColor: string;
+  }) => void;
+  onClearOverlays: () => void;
 }) {
   const cameraPos = useMemo(() => {
     if (preset === "top") return new THREE.Vector3(0, 10, 0.01);
@@ -211,9 +305,16 @@ function SceneRoot({
       <group
         onPointerDown={() => {
           setSelectedIndex(null);
+          onClearOverlays();
         }}
       >
-        <SceneMeshes scene={scene} selectedIndex={selectedIndex} onSelect={setSelectedIndex} />
+        <SceneMeshes
+          scene={scene}
+          selectedIndex={selectedIndex}
+          onSelect={setSelectedIndex}
+          wallFaceColors={wallFaceColors}
+          onRequestWallFaceColorPick={onRequestWallFaceColorPick}
+        />
       </group>
 
       <OrbitControls
@@ -234,48 +335,38 @@ export default function Floorplan3DViewer({ scene: rawScene }: Props) {
   const [preset, setPreset] = useState<CameraPreset>("iso");
   const [showGrid, setShowGrid] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [wallFaceColors, setWallFaceColors] = useState<WallFaceColorState>({});
+  const [colorPicker, setColorPicker] = useState<
+    | null
+    | {
+        wallIndex: number;
+        faceIndex: WallFaceIndex;
+        x: number;
+        y: number;
+        color: string;
+      }
+  >(null);
+
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   const scene = useMemo(() => computeScene(rawScene), [rawScene]);
   const hasAny = scene.items.length > 0;
 
   return (
-    <div className="relative w-full h-[420px] md:h-[520px]">
+    <div
+      ref={rootRef}
+      className="relative w-full h-[420px] md:h-[520px]"
+      onContextMenu={(e) => {
+        // prevent the browser menu so right-click is usable for coloring
+        e.preventDefault();
+      }}
+    >
       {!hasAny ? (
         <div className="w-full h-full flex items-center justify-center text-sm text-zinc-500">
           Generate a project to see the interactive 3D view.
         </div>
       ) : (
         <>
-          <div className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-lg border border-zinc-200 bg-white/90 backdrop-blur px-2 py-1 shadow-sm">
-            <button
-              type="button"
-              onClick={() => setPreset("iso")}
-              className={`px-2.5 py-1 text-xs font-bold uppercase tracking-wide rounded-md transition-colors ${
-                preset === "iso" ? "bg-black text-white" : "text-zinc-600 hover:text-black hover:bg-black/5"
-              }`}
-            >
-              Iso
-            </button>
-            <button
-              type="button"
-              onClick={() => setPreset("top")}
-              className={`px-2.5 py-1 text-xs font-bold uppercase tracking-wide rounded-md transition-colors ${
-                preset === "top" ? "bg-black text-white" : "text-zinc-600 hover:text-black hover:bg-black/5"
-              }`}
-            >
-              Top
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowGrid((v) => !v)}
-              className={`px-2.5 py-1 text-xs font-bold uppercase tracking-wide rounded-md transition-colors ${
-                showGrid ? "bg-zinc-100 text-black" : "text-zinc-600 hover:text-black hover:bg-black/5"
-              }`}
-            >
-              Grid
-            </button>
-          </div>
-
           <Canvas
             shadows
             dpr={[1, 2]}
@@ -287,8 +378,45 @@ export default function Floorplan3DViewer({ scene: rawScene }: Props) {
               showGrid={showGrid}
               selectedIndex={selectedIndex}
               setSelectedIndex={setSelectedIndex}
+              wallFaceColors={wallFaceColors}
+              onRequestWallFaceColorPick={({ wallIndex, faceIndex, clientX, clientY, currentColor }) => {
+                const rect = rootRef.current?.getBoundingClientRect();
+                const x = rect ? clientX - rect.left : clientX;
+                const y = rect ? clientY - rect.top : clientY;
+                setColorPicker({ wallIndex, faceIndex, x, y, color: currentColor });
+              }}
+              onClearOverlays={() => setColorPicker(null)}
             />
           </Canvas>
+
+          {colorPicker && (
+            <div
+              className="absolute z-20"
+              style={{
+                left: Math.max(8, Math.min(colorPicker.x, (rootRef.current?.clientWidth ?? 0) - 56)),
+                top: Math.max(8, Math.min(colorPicker.y, (rootRef.current?.clientHeight ?? 0) - 40)),
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <input
+                autoFocus
+                type="color"
+                value={colorPicker.color}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setColorPicker((p) => (p ? { ...p, color: next } : p));
+                  setWallFaceColors((prev) => {
+                    const existing = prev[colorPicker.wallIndex] ?? DEFAULT_WALL_FACE_COLORS;
+                    const updated: [string, string, string, string, string, string] = [...existing] as any;
+                    updated[colorPicker.faceIndex] = next;
+                    return { ...prev, [colorPicker.wallIndex]: updated };
+                  });
+                }}
+                onBlur={() => setColorPicker(null)}
+                className="h-9 w-12 cursor-pointer rounded-md border border-zinc-200 bg-white shadow"
+              />
+            </div>
+          )}
         </>
       )}
     </div>
