@@ -116,7 +116,7 @@ const VisualizerId = () => {
                 <div className="brand">
                     <Box className="logo" />
 
-                    <span className="name">Roomify</span>
+                    <span className="name">ArchLensAI</span>
                 </div>
                 <Button variant="ghost" size="sm" onClick={handleBack} className="exit">
                     <X className="icon" /> Exit Editor
