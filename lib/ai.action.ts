@@ -76,27 +76,27 @@ const renderFloorPlan3DPreview = async (api: FloorPlanSceneData): Promise<string
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    // base "floor"
+
     ctx.fillStyle = "#f5f3ef";
     ctx.fillRect(0, 0, size, size);
 
-    // subtle grid/noise feel
+
     ctx.globalAlpha = 0.08;
     ctx.fillStyle = "#000";
     for (let y = 0; y < size; y += 24) ctx.fillRect(0, y, size, 1);
     for (let x = 0; x < size; x += 24) ctx.fillRect(x, 0, 1, size);
     ctx.globalAlpha = 1;
 
-    // pseudo-extrusion parameters
+
     const lift = 10;
     const shadow = 6;
 
     const drawExtrudedRect = (x: number, y: number, w: number, h: number, top: string, side: string) => {
-        // shadow
+
         ctx.fillStyle = "rgba(0,0,0,0.12)";
         ctx.fillRect(x + shadow, y + shadow, w, h);
 
-        // side (down-right)
+
         ctx.fillStyle = side;
         ctx.beginPath();
         ctx.moveTo(x + w, y);
@@ -106,17 +106,17 @@ const renderFloorPlan3DPreview = async (api: FloorPlanSceneData): Promise<string
         ctx.closePath();
         ctx.fill();
 
-        // top (up-left)
+
         ctx.fillStyle = top;
         ctx.fillRect(x, y, w, h);
 
-        // edge highlight
+
         ctx.strokeStyle = "rgba(255,255,255,0.35)";
         ctx.lineWidth = 1;
         ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     };
 
-    // draw order: walls first, then windows/doors
+
     const items = points.map((p, i) => ({ p, c: classes[i]?.name || "wall" }));
     const order = (name: string) => (name === "wall" ? 0 : name === "window" ? 1 : 2);
     items.sort((a, b) => order(a.c) - order(b.c));
@@ -138,7 +138,7 @@ const renderFloorPlan3DPreview = async (api: FloorPlanSceneData): Promise<string
         } else if (c === "door") {
             drawExtrudedRect(x1, y1, w, h, "#b88a5a", "#8a623b");
         } else {
-            // unknown class: draw lightly
+
             ctx.globalAlpha = 0.6;
             drawExtrudedRect(x1, y1, w, h, "#d6d4cf", "#a9a7a2");
             ctx.globalAlpha = 1;

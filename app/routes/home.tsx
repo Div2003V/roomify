@@ -76,10 +76,6 @@ export default function Home() {
 
               <h1>Build beautiful spaces at the speed of thought with ArchLensAI</h1>
 
-              <p className="subtitle">
-                  ArchLensAI is an AI-first design environment that helps you visualize, render, and ship architectural projects faster  than ever.
-              </p>
-
               <div className="actions">
                   <a href="#upload" className="cta">
                       Start Building <ArrowRight className="icon" />

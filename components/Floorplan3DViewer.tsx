@@ -40,7 +40,7 @@ const computeScene = (scene?: FloorPlanSceneData) => {
     kind: classes[i]?.name ?? "wall",
   }));
 
-  // normalize into a centered XY plane (we'll render on XZ for a "floor")
+
   const norm = items.map((it) => {
     const w = Math.max(1, it.box.x2 - it.box.x1);
     const h = Math.max(1, it.box.y2 - it.box.y1);
@@ -357,7 +357,7 @@ export default function Floorplan3DViewer({ scene: rawScene }: Props) {
       ref={rootRef}
       className="relative w-full h-[420px] md:h-[520px]"
       onContextMenu={(e) => {
-        // prevent the browser menu so right-click is usable for coloring
+
         e.preventDefault();
       }}
     >

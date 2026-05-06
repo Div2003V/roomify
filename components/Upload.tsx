@@ -30,7 +30,7 @@ const Upload = ({ onComplete }: UploadProps) => {
     const fileToPngIfNeeded = useCallback(async (originalFile: File): Promise<File> => {
         if (originalFile.type === "image/png") return originalFile;
 
-        // Convert any other image type to PNG client-side via canvas.
+
         const objectUrl = URL.createObjectURL(originalFile);
         try {
             const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -123,7 +123,7 @@ const Upload = ({ onComplete }: UploadProps) => {
         if (selectedFile) {
             void processFile(selectedFile);
         }
-        // Allow selecting the same file again.
+
         e.target.value = "";
     };
 
